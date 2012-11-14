@@ -39,6 +39,17 @@ static unsigned int keys;
 static bool select_using_depthbuffer = false;
 
 static bool key_up, key_down, key_left, key_right;
+static bool* keyStates = new bool[256]; // Create an array of boolean values. Indicies are the ASCII (char) code
+
+static char control_forward = 'w';
+static char control_left = 'a';
+static char control_right = 'd';
+static char control_back = 's';
+
+static bool move_forward = false;
+static bool move_right = false;
+static bool move_left = false;
+static bool move_back = false;
 
 // Size of one chunk in blocks
 #define CX 16
@@ -999,6 +1010,32 @@ static void display() {
 	glutSwapBuffers();
 }
 
+static void keyDown(unsigned char key, int mouse_x, int mouse_y) {
+	keyStates[key] = true;
+	if (key == control_forward) {
+		move_forward = true;
+	} else if (key == control_back) {
+		move_back = true;
+	} else if (key == control_right) {
+		move_right = true;
+	} else if (key == control_left) {
+		move_left = true;
+	}
+}
+
+static void keyUp(unsigned char key, int mouse_x, int mouse_y) {
+	keyStates[key] = false;
+	if (key == control_forward) {
+		move_forward = false;
+	} else if (key == control_back) {
+		move_back = false;
+	} else if (key == control_right) {
+		move_right = false;
+	} else if (key == control_left) {
+		move_left = false;
+	}
+}
+
 static void special(int key, int x, int y) {
 	switch(key) {
 		case GLUT_KEY_LEFT:
@@ -1074,39 +1111,39 @@ static void idle() {
 	velocity.x = 0;
 	velocity.z = 0;
 
-	if (key_up && key_left) {
+	if (move_forward && move_left) {
 		velocity.x = 0.70710678118 * movespeed * (forward.x - right.x);
 		velocity.z = 0.70710678118 * movespeed * (forward.z - right.z);
-	} else if (key_down && key_left) {
+	} else if (move_back && move_left) {
 		velocity.x = 0.70710678118 * movespeed * (-forward.x - right.x);
 		velocity.z = 0.70710678118 * movespeed * (-forward.z - right.z);
-	} else if (key_down && key_right) {
+	} else if (move_back && move_right) {
 		velocity.x = 0.70710678118 * movespeed * (-forward.x + right.x);
 		velocity.z = 0.70710678118 * movespeed * (-forward.z + right.z);
-	} else if (key_up && key_right) {
+	} else if (move_forward && move_right) {
 		velocity.x = 0.70710678118 * movespeed * (forward.x + right.x);
 		velocity.z = 0.70710678118 * movespeed * (forward.z + right.z);
-	} else if(key_left) {
+	} else if(move_left) {
 		velocity.x = -right.x * movespeed;
 		velocity.z = -right.z * movespeed;
-	} else if(key_right) {
+	} else if(move_right) {
 		velocity.x = right.x * movespeed;
 		velocity.z = right.z * movespeed;
-	} else if(key_up) {
+	} else if(move_forward) {
 		velocity.x = forward.x * movespeed;
 		velocity.z = forward.z * movespeed;
-	} else if(key_down) {
+	} else if(move_back) {
 		velocity.x = -forward.x * movespeed;
 		velocity.z = -forward.z * movespeed;
 	}
 
-	if(keys & 16) {
+	/*if(keys & 16) {
 		position.y += movespeed * dt;
 		velocity.y = 0.0;
 	}
 	if(keys & 32) {
 		position.y -= movespeed * dt;
-	}
+	}*/
 	position.x += velocity.x * dt;
 	position.z += velocity.z * dt;
 	position.y += velocity.y * dt;
@@ -1218,6 +1255,8 @@ int main(int argc, char* argv[]) {
 		glutIdleFunc(display);
 		glutSpecialFunc(special);
 		glutSpecialUpFunc(specialup);
+		glutKeyboardFunc(keyDown);
+		glutKeyboardUpFunc(keyUp);
 		glutIdleFunc(idle);
 		glutPassiveMotionFunc(motion);
 		glutMotionFunc(motion);
