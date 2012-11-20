@@ -1,4 +1,6 @@
 varying vec4 texcoord;
+varying vec4 theColor;
+//flat in theColor;
 uniform sampler2D texture;
 
 const vec4 fogcolor = vec4(0.6, 0.8, 1.0, 1.0);
@@ -33,5 +35,6 @@ void main(void) {
 	float fog = clamp(exp(-fogdensity * z * z), 0.2, 1.0);
 
 	// Final color is a mix of the actual color and the fog color
-	gl_FragColor = mix(fogcolor, color, fog);
+	//gl_FragColor = mix(fogcolor, color, fog);
+	gl_FragColor = theColor;
 }

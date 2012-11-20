@@ -15,6 +15,7 @@
 
 static GLuint program;
 static GLint attribute_coord;
+static GLint color_coord;
 static GLint uniform_mvp;
 static GLuint texture;
 static GLint uniform_texture;
@@ -74,14 +75,17 @@ static const char *blocknames[16] = {
 };
 
 typedef glm::detail::tvec4<GLbyte> byte4;
+typedef glm::detail::tvec4<GLfloat> float4;
 
 static struct chunk *chunk_slot[CHUNKSLOTS] = {0};
+static struct chunk *chunk_slot_color[CHUNKSLOTS] = {0};
 
 struct chunk {
 	uint8_t blk[CX][CY][CZ];
 	struct chunk *left, *right, *below, *above, *front, *back;
 	int slot;
 	GLuint vbo;
+	GLuint vbo_color;
 	int elements;
 	time_t lastused;
 	bool changed;
@@ -293,9 +297,11 @@ struct chunk {
 
 	void update() {
 		byte4 vertex[CX * CY * CZ * 18];
+		float4 vertex_color[CX * CY * CZ * 18];
 		int i = 0;
+		int j = 0;
 		int merged = 0;
-		bool vis = false;;
+		bool vis = false;
 
 		// View from negative x
 
@@ -326,6 +332,9 @@ struct chunk {
 						vertex[i - 5] = byte4(x, y, z + 1, side);
 						vertex[i - 2] = byte4(x, y, z + 1, side);
 						vertex[i - 1] = byte4(x, y + 1, z + 1, side);
+						vertex_color[j - 5] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j - 2] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j - 1] = float4(1.0, 0.0, 0.0, 1.0);
 						merged++;
 					// Otherwise, add a new quad.
 					} else {
@@ -335,6 +344,12 @@ struct chunk {
 						vertex[i++] = byte4(x, y + 1, z, side);
 						vertex[i++] = byte4(x, y, z + 1, side);
 						vertex[i++] = byte4(x, y + 1, z + 1, side);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
 					}
 					
 					vis = true;
@@ -367,6 +382,9 @@ struct chunk {
 						vertex[i - 4] = byte4(x + 1, y, z + 1, side);
 						vertex[i - 2] = byte4(x + 1, y + 1, z + 1, side);
 						vertex[i - 1] = byte4(x + 1, y, z + 1, side);
+						vertex_color[j - 4] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j - 2] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j - 1] = float4(1.0, 0.0, 0.0, 1.0);
 						merged++;
 					} else {
 						vertex[i++] = byte4(x + 1, y, z, side);
@@ -375,6 +393,12 @@ struct chunk {
 						vertex[i++] = byte4(x + 1, y + 1, z, side);
 						vertex[i++] = byte4(x + 1, y + 1, z + 1, side);
 						vertex[i++] = byte4(x + 1, y, z + 1, side);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
 					}
 					vis = true;
 				}
@@ -404,6 +428,9 @@ struct chunk {
 						vertex[i - 4] = byte4(x, y, z + 1, bottom + 128);
 						vertex[i - 2] = byte4(x + 1, y, z + 1, bottom + 128);
 						vertex[i - 1] = byte4(x, y, z + 1, bottom + 128);
+						vertex_color[j - 4] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j - 2] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j - 1] = float4(1.0, 0.0, 0.0, 1.0);
 						merged++;
 					} else {
 						vertex[i++] = byte4(x, y, z, bottom + 128);
@@ -412,6 +439,12 @@ struct chunk {
 						vertex[i++] = byte4(x + 1, y, z, bottom + 128);
 						vertex[i++] = byte4(x + 1, y, z + 1, bottom + 128);
 						vertex[i++] = byte4(x, y, z + 1, bottom + 128);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
 					}
 					vis = true;
 				}
@@ -441,6 +474,9 @@ struct chunk {
 						vertex[i - 5] = byte4(x, y + 1, z + 1, top + 128);
 						vertex[i - 2] = byte4(x, y + 1, z + 1, top + 128);
 						vertex[i - 1] = byte4(x + 1, y + 1, z + 1, top + 128);
+						vertex_color[j - 5] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j - 2] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j - 1] = float4(1.0, 0.0, 0.0, 1.0);
 						merged++;
 					} else {
 						vertex[i++] = byte4(x, y + 1, z, top + 128);
@@ -449,6 +485,12 @@ struct chunk {
 						vertex[i++] = byte4(x + 1, y + 1, z, top + 128);
 						vertex[i++] = byte4(x, y + 1, z + 1, top + 128);
 						vertex[i++] = byte4(x + 1, y + 1, z + 1, top + 128);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
 					}
 					vis = true;
 				}
@@ -480,6 +522,9 @@ struct chunk {
 						vertex[i - 5] = byte4(x, y + 1, z, side);
 						vertex[i - 3] = byte4(x, y + 1, z, side);
 						vertex[i - 2] = byte4(x + 1, y + 1, z, side);
+						vertex_color[j - 5] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j - 3] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j - 2] = float4(1.0, 0.0, 0.0, 1.0);
 						merged++;
 					} else {
 						vertex[i++] = byte4(x, y, z, side);
@@ -488,6 +533,12 @@ struct chunk {
 						vertex[i++] = byte4(x, y + 1, z, side);
 						vertex[i++] = byte4(x + 1, y + 1, z, side);
 						vertex[i++] = byte4(x + 1, y, z, side);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
 					}
 					vis = true;
 				}
@@ -519,6 +570,9 @@ struct chunk {
 						vertex[i - 4] = byte4(x, y + 1, z + 1, side);
 						vertex[i - 3] = byte4(x, y + 1, z + 1, side);
 						vertex[i - 1] = byte4(x + 1, y + 1, z + 1, side);
+						vertex_color[j - 4] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j - 3] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j - 1] = float4(1.0, 0.0, 0.0, 1.0);
 						merged++;
 					} else {
 						vertex[i++] = byte4(x, y, z + 1, side);
@@ -527,6 +581,12 @@ struct chunk {
 						vertex[i++] = byte4(x, y + 1, z + 1, side);
 						vertex[i++] = byte4(x + 1, y, z + 1, side);
 						vertex[i++] = byte4(x + 1, y + 1, z + 1, side);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
 					}
 					vis = true;
 				}
@@ -567,10 +627,39 @@ struct chunk {
 			chunk_slot[slot] = this;
 		}
 
-		// Upload vertices
+		// If we don't have an active slot, find one
+		if(chunk_slot_color[slot] != this) {
+			int lru = 0;
+			for(int i = 0; i < CHUNKSLOTS; i++) {
+				// If there is an empty slot, use it
+				if(!chunk_slot_color[i]) {
+					lru = i;
+					break;
+				}
+				// Otherwise try to find the least recently used slot
+				if(chunk_slot_color[i]->lastused < chunk_slot_color[lru]->lastused)
+					lru = i;
+			}
 
+			// If the slot is empty, create a new vbo_color
+			if(!chunk_slot_color[lru]) {
+				glGenBuffers(1, &vbo_color);
+			// Otherwise, steal it from the previous slot owner
+			} else {
+				vbo_color = chunk_slot_color[lru]->vbo_color;
+				chunk_slot_color[lru]->changed = true;
+			}
+
+			slot = lru;
+			chunk_slot_color[slot] = this;
+		}
+
+		// Upload vertices
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		glBufferData(GL_ARRAY_BUFFER, i * sizeof *vertex, vertex, GL_STATIC_DRAW);
+
+		glBindBuffer(GL_ARRAY_BUFFER, vbo_color);
+		glBufferData(GL_ARRAY_BUFFER, j * sizeof *vertex_color, vertex_color, GL_STATIC_DRAW);
 
 		//fprintf(stderr, "Updated chunk, %i vertices (%i kb)\n", i, (i * 4) / 1024);
 		//fprintf(stderr, "Merged %d faces (%i vertices, %i kb saved)\n", merged, merged * 6, (merged * 24) / 1024);
@@ -587,6 +676,10 @@ struct chunk {
 
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		glVertexAttribPointer(attribute_coord, 4, GL_BYTE, GL_FALSE, 0, 0);
+
+		glBindBuffer(GL_ARRAY_BUFFER, vbo_color);
+		glVertexAttribPointer(color_coord, 4, GL_FLOAT, GL_FALSE, 0, 0);
+
 		glDrawArrays(GL_TRIANGLES, 0, elements);
 	}
 };
@@ -764,6 +857,14 @@ static int init_resources() {
 		return 0;
 	}
 
+	const char* color_name;
+	color_name = "color";
+	color_coord = glGetAttribLocation(program, color_name);
+	if (color_coord == -1) {
+		fprintf(stderr, "Could not bind uniform %s\n", color_name);
+		return 0;
+	}
+
 	/* Upload the texture with our datapoints */
 	glActiveTexture(GL_TEXTURE0);
 	glGenTextures(1, &texture);
@@ -774,7 +875,7 @@ static int init_resources() {
 	world = new superchunk;
 
 	position = glm::vec3(0, CY + 1, 0);
-	//velocity = glm::vec3(0, 0, 0);
+	velocity = glm::vec3(0, 0, 0);
 	key_up = false;
 	key_left = false;
 	key_right = false;
@@ -782,7 +883,7 @@ static int init_resources() {
 	angle = glm::vec3(0, -0.5, 0);
 	update_vectors();
 
-	glGenBuffers(1, &ground_vbo);
+	/*glGenBuffers(1, &ground_vbo);
 	float ground[4][4] = {
 		{-CX * SCX / 2, 0, -CZ * SCZ / 2, 1 - 128},
 		{-CX * SCX / 2, 0, +CZ * SCZ / 2, 1 - 128},
@@ -791,7 +892,7 @@ static int init_resources() {
 	};
 
 	glBindBuffer(GL_ARRAY_BUFFER, ground_vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof ground, ground, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, sizeof ground, ground, GL_STATIC_DRAW);*/
 
 	glGenBuffers(1, &cursor_vbo);
 	return 1;
@@ -837,6 +938,7 @@ static void display() {
 	glEnable(GL_POLYGON_OFFSET_FILL);
 
 	glEnableVertexAttribArray(attribute_coord);
+	glEnableVertexAttribArray(color_coord);
 
 	/* Enable blending? Only works correctly when rendering in the correct order. */
 
@@ -845,11 +947,11 @@ static void display() {
 
 	/* Draw the ground if we only have one layer of chunks */
 
-	if(SCY <= 1) {
+	/*if(SCY <= 1) {
 		glBindBuffer(GL_ARRAY_BUFFER, ground_vbo);
 		glVertexAttribPointer(attribute_coord, 4, GL_FLOAT, GL_FALSE, 0, 0);
 		glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-	}
+	}*/
 
 	/* Then draw chunks */
 
@@ -951,7 +1053,7 @@ static void display() {
 
 	/* Render a box around the block we are pointing at */
 
-	float box[24][4] = {
+	/*float box[24][4] = {
 		{bx + 0, by + 0, bz + 0, 14},
 		{bx + 1, by + 0, bz + 0, 14},
 		{bx + 0, by + 1, bz + 0, 14},
@@ -986,11 +1088,11 @@ static void display() {
 	glBindBuffer(GL_ARRAY_BUFFER, cursor_vbo);
 	glBufferData(GL_ARRAY_BUFFER, sizeof box, box, GL_DYNAMIC_DRAW);
 	glVertexAttribPointer(attribute_coord, 4, GL_FLOAT, GL_FALSE, 0, 0);
-	glDrawArrays(GL_LINES, 0, 36);
+	glDrawArrays(GL_LINES, 0, 36);*/
 
 	/* Draw a cross in the center of the screen */
 
-	float cross[4][4] = {
+	/*float cross[4][4] = {
 		{-0.05, 0, 0, 13},
 		{+0.05, 0, 0, 13},
 		{0, -0.05, 0, 13},
@@ -1003,7 +1105,7 @@ static void display() {
 	glBindBuffer(GL_ARRAY_BUFFER, cursor_vbo);
 	glBufferData(GL_ARRAY_BUFFER, sizeof cross, cross, GL_DYNAMIC_DRAW);
 	glVertexAttribPointer(attribute_coord, 4, GL_FLOAT, GL_FALSE, 0, 0);
-	glDrawArrays(GL_LINES, 0, 36);
+	glDrawArrays(GL_LINES, 0, 36);*/
 
 	/* And we are done */
 
@@ -1144,12 +1246,18 @@ static void idle() {
 	if(keys & 32) {
 		position.y -= movespeed * dt;
 	}*/
+
 	position.x += velocity.x * dt;
 	position.z += velocity.z * dt;
 	position.y += velocity.y * dt;
-	//position.y += velocity.y * dt + 0.5 * gravity * dt * dt;
-	//velocity.y += gravity * dt;
-
+	position.y += velocity.y * dt + 0.5 * gravity * dt * dt;
+	int xx = int(position.x);
+	int yy = int(position.y);
+	int zz = int(position.z);
+	velocity.y += gravity * dt;
+	if (world->get(xx, yy-3, zz) != 0) {
+		velocity.y = 0;
+	}
 	glutPostRedisplay();
 }
 
