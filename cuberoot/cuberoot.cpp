@@ -82,6 +82,8 @@ static struct chunk *chunk_slot_color[CHUNKSLOTS] = {0};
 
 struct chunk {
 	uint8_t blk[CX][CY][CZ];
+	GLfloat color[CX][CY][CZ][3];
+	bool solid[CX][CY][CZ];
 	struct chunk *left, *right, *below, *above, *front, *back;
 	int slot;
 	GLuint vbo;
@@ -97,6 +99,8 @@ struct chunk {
 
 	chunk(): ax(0), ay(0), az(0) {
 		memset(blk, 0, sizeof blk);
+		memset(color, 0, sizeof color);
+		memset(solid, 0, sizeof solid);
 		left = right = below = above = front = back = 0;
 		lastused = now;
 		slot = 0;
@@ -107,6 +111,8 @@ struct chunk {
 
 	chunk(int x, int y, int z): ax(x), ay(y), az(z) {
 		memset(blk, 0, sizeof blk);
+		memset(color, 0, sizeof color);
+		memset(solid, 0, sizeof solid);
 		left = right = below = above = front = back = 0;
 		lastused = now;
 		slot = 0;
@@ -132,57 +138,66 @@ struct chunk {
 	}
 
 	bool isblocked(int x1, int y1, int z1, int x2, int y2, int z2) {
-		// Invisible blocks are always "blocked"
-		if(!blk[x1][y1][z1])
+		if (solid[x1][y1][z1]) {
+			return false;
+		} else {
 			return true;
+		}
+		// Invisible blocks are always "blocked"
+		//if(!blk[x1][y1][z1])
+		//	return true;
 
 		// Leaves do not block any other block, including themselves
-		if(transparent[get(x2, y2, z2)] == 1)
-			return false;
+		//if(transparent[get(x2, y2, z2)] == 1)
+		//	return false;
 
 		// Non-transparent blocks always block line of sight
-		if(!transparent[get(x2, y2, z2)])
-			return true;
+		//if(!transparent[get(x2, y2, z2)])
+		//	return true;
 
 		// Otherwise, LOS is only blocked by blocks if the same transparency type
-		return transparent[get(x2, y2, z2)] == transparent[blk[x1][y1][z1]];
+		//return transparent[get(x2, y2, z2)] == transparent[blk[x1][y1][z1]];
 	}
 
-	void set(int x, int y, int z, uint8_t type) {
+	void set(int x, int y, int z, bool set_solid, GLfloat r, GLfloat g, GLfloat b) {
 		// If coordinates are outside this chunk, find the right one.
 		if(x < 0) {
 			if(left)
-				left->set(x + CX, y, z, type);
+				left->set(x + CX, y, z, solid, r, g, b);
 			return;
 		}
 		if(x >= CX) {
 			if(right)
-				right->set(x - CX, y, z, type);
+				right->set(x - CX, y, z, solid, r, g, b);
 			return;
 		}
 		if(y < 0) {
 			if(below)
-				below->set(x, y + CY, z, type);
+				below->set(x, y + CY, z, solid, r, g, b);
 			return;
 		}
 		if(y >= CY) {
 			if(above)
-				above->set(x, y - CY, z, type);
+				above->set(x, y - CY, z, solid, r, g, b);
 			return;
 		}
 		if(z < 0) {
 			if(front)
-				front->set(x, y, z + CZ, type);
+				front->set(x, y, z + CZ, solid, r, g, b);
 			return;
 		}
 		if(z >= CZ) {
 			if(back)
-				back->set(x, y, z - CZ, type);
+				back->set(x, y, z - CZ, solid, r, g, b);
 			return;
 		}
 
+		solid[x][y][z] = set_solid;
+		color[x][y][z][0] = r;
+		color[x][y][z][1] = g;
+		color[x][y][z][2] = b;
+
 		// Change the block
-		blk[x][y][z] = type;
 		changed = true;
 
 		// When updating blocks at the edge of this chunk,
@@ -249,23 +264,23 @@ struct chunk {
 					if(y + ay * CY >= h) {
 						// If we are not yet up to sea level, fill with water blocks
 						if(y + ay * CY < SEALEVEL) {
-							blk[x][y][z] = 8;
+							set(x, y, z, true, 0.0, 0.0, 100.0);
 							continue;
 						// Otherwise, we are in the air
 						} else {
 							// A tree!
-							if(get(x, y - 1, z) == 3 && (rand() & 0xff) == 0) {
+							if(/*get(x, y - 1, z) == 3 && */(rand() & 0xff) == 0) {
 								// Trunk
 								h = (rand() & 0x3) + 3;
 								for(int i = 0; i < h; i++)
-									set(x, y + i, z, 5);
+									set(x, y + i, z, true, 210.0, 105.0, 30.0);
 
 								// Leaves
 								for(int ix = -3; ix <= 3; ix++) { 
 									for(int iy = -3; iy <= 3; iy++) { 
 										for(int iz = -3; iz <= 3; iz++) { 
 											if(ix * ix + iy * iy + iz * iz < 8 + (rand() & 1) && !get(x + ix, y + h + iy, z + iz))
-												set(x + ix, y + h + iy, z + iz, 4);
+												set(x + ix, y + h + iy, z + iz, true, 0.0, 100.0, 0.0);
 										}
 									}
 								}
@@ -279,16 +294,19 @@ struct chunk {
 
 					// Sand layer
 					if(n + r * 5 < 4)
-						blk[x][y][z] = 7;
+						set(x, y, z, true, 255.0, 215.0, 0.0);
 					// Dirt layer, but use grass blocks for the top
 					else if(n + r * 5 < 8)
-						blk[x][y][z] = (h < SEALEVEL || y + ay * CY < h - 1) ? 1 : 3;
+						set(x, y, z, true, 139.0, 69.0, 19.0);
+						//blk[x][y][z] = (h < SEALEVEL || y + ay * CY < h - 1) ? 1 : 3;
 					// Rock layer
 					else if(r < 1.25)
-						blk[x][y][z] = 6;
+						set(x, y, z, true, 105.0, 105.0, 105.0);
+						//blk[x][y][z] = 6;
 					// Sometimes, ores!
 					else
-						blk[x][y][z] = 11;
+						set(x, y, z, true, 105.0, 105.0, 105.0);
+						//blk[x][y][z] = 11;
 				}
 			}
 		}
@@ -327,14 +345,26 @@ struct chunk {
 						top = bottom = 12;
 					}
 
+					GLfloat r = color[x][y][z][0];
+					GLfloat g = color[x][y][z][1];
+					GLfloat b = color[x][y][z][2];
+
+					GLfloat r2 = color[x][y][z-1][0];
+					GLfloat g2 = color[x][y][z-1][1];
+					GLfloat b2 = color[x][y][z-1][2];
+
+					GLfloat rf = r/255.0;
+					GLfloat gf = g/255.0;
+					GLfloat bf = b/255.0;
+
 					// Same block as previous one? Extend it.
-					if(vis && z != 0 && blk[x][y][z] == blk[x][y][z - 1]) {
+					if(vis && z != 0 && r == r2 && g == g2 && b == b2) {
 						vertex[i - 5] = byte4(x, y, z + 1, side);
 						vertex[i - 2] = byte4(x, y, z + 1, side);
 						vertex[i - 1] = byte4(x, y + 1, z + 1, side);
-						vertex_color[j - 5] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j - 2] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j - 1] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j - 5] = float4(rf, gf, bf, 1.0);
+						vertex_color[j - 2] = float4(rf, gf, bf, 1.0);
+						vertex_color[j - 1] = float4(rf, gf, bf, 1.0);
 						merged++;
 					// Otherwise, add a new quad.
 					} else {
@@ -344,12 +374,12 @@ struct chunk {
 						vertex[i++] = byte4(x, y + 1, z, side);
 						vertex[i++] = byte4(x, y, z + 1, side);
 						vertex[i++] = byte4(x, y + 1, z + 1, side);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
 					}
 					
 					vis = true;
@@ -378,13 +408,25 @@ struct chunk {
 						top = bottom = 12;
 					}
 
-					if(vis && z != 0 && blk[x][y][z] == blk[x][y][z - 1]) {
+					GLfloat r = color[x][y][z][0];
+					GLfloat g = color[x][y][z][1];
+					GLfloat b = color[x][y][z][2];
+
+					GLfloat r2 = color[x][y][z-1][0];
+					GLfloat g2 = color[x][y][z-1][1];
+					GLfloat b2 = color[x][y][z-1][2];
+
+					GLfloat rf = r/255.0;
+					GLfloat gf = g/255.0;
+					GLfloat bf = b/255.0;
+
+					if(vis && z != 0 && r == r2 && g == g2 && b == b2) {
 						vertex[i - 4] = byte4(x + 1, y, z + 1, side);
 						vertex[i - 2] = byte4(x + 1, y + 1, z + 1, side);
 						vertex[i - 1] = byte4(x + 1, y, z + 1, side);
-						vertex_color[j - 4] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j - 2] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j - 1] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j - 4] = float4(rf, gf, bf, 1.0);
+						vertex_color[j - 2] = float4(rf, gf, bf, 1.0);
+						vertex_color[j - 1] = float4(rf, gf, bf, 1.0);
 						merged++;
 					} else {
 						vertex[i++] = byte4(x + 1, y, z, side);
@@ -393,12 +435,12 @@ struct chunk {
 						vertex[i++] = byte4(x + 1, y + 1, z, side);
 						vertex[i++] = byte4(x + 1, y + 1, z + 1, side);
 						vertex[i++] = byte4(x + 1, y, z + 1, side);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
 					}
 					vis = true;
 				}
@@ -424,13 +466,25 @@ struct chunk {
 						top = bottom = 12;
 					}
 
-					if(vis && z != 0 && blk[x][y][z] == blk[x][y][z - 1]) {
+					GLfloat r = color[x][y][z][0];
+					GLfloat g = color[x][y][z][1];
+					GLfloat b = color[x][y][z][2];
+
+					GLfloat r2 = color[x][y][z-1][0];
+					GLfloat g2 = color[x][y][z-1][1];
+					GLfloat b2 = color[x][y][z-1][2];
+
+					GLfloat rf = r/255.0;
+					GLfloat gf = g/255.0;
+					GLfloat bf = b/255.0;
+
+					if(vis && z != 0 && r == r2 && g == g2 && b == b2) {
 						vertex[i - 4] = byte4(x, y, z + 1, bottom + 128);
 						vertex[i - 2] = byte4(x + 1, y, z + 1, bottom + 128);
 						vertex[i - 1] = byte4(x, y, z + 1, bottom + 128);
-						vertex_color[j - 4] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j - 2] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j - 1] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j - 4] = float4(rf, gf, bf, 1.0);
+						vertex_color[j - 2] = float4(rf, gf, bf, 1.0);
+						vertex_color[j - 1] = float4(rf, gf, bf, 1.0);
 						merged++;
 					} else {
 						vertex[i++] = byte4(x, y, z, bottom + 128);
@@ -439,12 +493,12 @@ struct chunk {
 						vertex[i++] = byte4(x + 1, y, z, bottom + 128);
 						vertex[i++] = byte4(x + 1, y, z + 1, bottom + 128);
 						vertex[i++] = byte4(x, y, z + 1, bottom + 128);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
 					}
 					vis = true;
 				}
@@ -470,13 +524,25 @@ struct chunk {
 						top = bottom = 12;
 					}
 
-					if(vis && z != 0 && blk[x][y][z] == blk[x][y][z - 1]) {
+					GLfloat r = color[x][y][z][0];
+					GLfloat g = color[x][y][z][1];
+					GLfloat b = color[x][y][z][2];
+
+					GLfloat r2 = color[x][y][z-1][0];
+					GLfloat g2 = color[x][y][z-1][1];
+					GLfloat b2 = color[x][y][z-1][2];
+
+					GLfloat rf = r/255.0;
+					GLfloat gf = g/255.0;
+					GLfloat bf = b/255.0;
+
+					if(vis && z != 0 && r == r2 && g == g2 && b == b2) {
 						vertex[i - 5] = byte4(x, y + 1, z + 1, top + 128);
 						vertex[i - 2] = byte4(x, y + 1, z + 1, top + 128);
 						vertex[i - 1] = byte4(x + 1, y + 1, z + 1, top + 128);
-						vertex_color[j - 5] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j - 2] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j - 1] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j - 5] = float4(rf, gf, bf, 1.0);
+						vertex_color[j - 2] = float4(rf, gf, bf, 1.0);
+						vertex_color[j - 1] = float4(rf, gf, bf, 1.0);
 						merged++;
 					} else {
 						vertex[i++] = byte4(x, y + 1, z, top + 128);
@@ -485,12 +551,12 @@ struct chunk {
 						vertex[i++] = byte4(x + 1, y + 1, z, top + 128);
 						vertex[i++] = byte4(x, y + 1, z + 1, top + 128);
 						vertex[i++] = byte4(x + 1, y + 1, z + 1, top + 128);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
 					}
 					vis = true;
 				}
@@ -518,13 +584,25 @@ struct chunk {
 						top = bottom = 12;
 					}
 
-					if(vis && y != 0 && blk[x][y][z] == blk[x][y - 1][z]) {
+					GLfloat r = color[x][y][z][0];
+					GLfloat g = color[x][y][z][1];
+					GLfloat b = color[x][y][z][2];
+
+					GLfloat r2 = color[x][y-1][z][0];
+					GLfloat g2 = color[x][y-1][z][1];
+					GLfloat b2 = color[x][y-1][z][2];
+
+					GLfloat rf = r/255.0;
+					GLfloat gf = g/255.0;
+					GLfloat bf = b/255.0;
+
+					if(vis && y != 0 && r == r2 && g == g2 && b == b2) {
 						vertex[i - 5] = byte4(x, y + 1, z, side);
 						vertex[i - 3] = byte4(x, y + 1, z, side);
 						vertex[i - 2] = byte4(x + 1, y + 1, z, side);
-						vertex_color[j - 5] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j - 3] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j - 2] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j - 5] = float4(rf, gf, bf, 1.0);
+						vertex_color[j - 3] = float4(rf, gf, bf, 1.0);
+						vertex_color[j - 2] = float4(rf, gf, bf, 1.0);
 						merged++;
 					} else {
 						vertex[i++] = byte4(x, y, z, side);
@@ -533,12 +611,12 @@ struct chunk {
 						vertex[i++] = byte4(x, y + 1, z, side);
 						vertex[i++] = byte4(x + 1, y + 1, z, side);
 						vertex[i++] = byte4(x + 1, y, z, side);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
 					}
 					vis = true;
 				}
@@ -566,13 +644,25 @@ struct chunk {
 						top = bottom = 12;
 					}
 
-					if(vis && y != 0 && blk[x][y][z] == blk[x][y - 1][z]) {
+					GLfloat r = color[x][y][z][0];
+					GLfloat g = color[x][y][z][1];
+					GLfloat b = color[x][y][z][2];
+
+					GLfloat r2 = color[x][y-1][z][0];
+					GLfloat g2 = color[x][y-1][z][1];
+					GLfloat b2 = color[x][y-1][z][2];
+
+					GLfloat rf = r/255.0;
+					GLfloat gf = g/255.0;
+					GLfloat bf = b/255.0;
+
+					if(vis && y != 0 && r == r2 && g == g2 && b == b2) {
 						vertex[i - 4] = byte4(x, y + 1, z + 1, side);
 						vertex[i - 3] = byte4(x, y + 1, z + 1, side);
 						vertex[i - 1] = byte4(x + 1, y + 1, z + 1, side);
-						vertex_color[j - 4] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j - 3] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j - 1] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j - 4] = float4(rf, gf, bf, 1.0);
+						vertex_color[j - 3] = float4(rf, gf, bf, 1.0);
+						vertex_color[j - 1] = float4(rf, gf, bf, 1.0);
 						merged++;
 					} else {
 						vertex[i++] = byte4(x, y, z + 1, side);
@@ -581,12 +671,12 @@ struct chunk {
 						vertex[i++] = byte4(x, y + 1, z + 1, side);
 						vertex[i++] = byte4(x + 1, y, z + 1, side);
 						vertex[i++] = byte4(x + 1, y + 1, z + 1, side);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
-						vertex_color[j++] = float4(1.0, 0.0, 0.0, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
+						vertex_color[j++] = float4(rf, gf, bf, 1.0);
 					}
 					vis = true;
 				}
@@ -724,7 +814,7 @@ struct superchunk {
 		return c[cx][cy][cz]->get(x & (CX - 1), y & (CY - 1), z & (CZ - 1));
 	}
 
-	void set(int x, int y, int z, uint8_t type) {
+	void set(int x, int y, int z, bool solid, GLfloat r, GLfloat g, GLfloat b) {
 		int cx = (x + CX * (SCX / 2)) / CX;
 		int cy = (y + CY * (SCY / 2)) / CY;
 		int cz = (z + CZ * (SCZ / 2)) / CZ;
@@ -732,7 +822,8 @@ struct superchunk {
 		if(cx < 0 || cx >= SCX || cy < 0 || cy >= SCY || cz <= 0 || cz >= SCZ)
 			return;
 
-		c[cx][cy][cz]->set(x & (CX - 1), y & (CY - 1), z & (CZ - 1), type);
+		c[cx][cy][cz]->set(x & (CX - 1), y & (CY - 1), z & (CZ - 1), solid, r, g, b);
+		//c[cx][cy][cz]->set(x & (CX - 1), y & (CY - 1), z & (CZ - 1), type);
 	}
 
 	void render(const glm::mat4 &pv) {
@@ -1254,7 +1345,7 @@ static void idle() {
 	int xx = int(position.x);
 	int yy = int(position.y);
 	int zz = int(position.z);
-	velocity.y += gravity * dt;
+	//velocity.y += gravity * dt;
 	if (world->get(xx, yy-3, zz) != 0) {
 		velocity.y = 0;
 	}
@@ -1320,9 +1411,10 @@ static void mouse(int button, int state, int x, int y) {
 			mz++;
 		if(face == 5)
 			mz--;
-		world->set(mx, my, mz, buildtype);
+		world->set(mx, my, mz, true, 105.0, 105.0, 105.0);
+		//world->set(mx, my, mz, buildtype);
 	} else {
-		world->set(mx, my, mz, 0);
+		world->set(mx, my, mz, false, 0.0, 0.0, 0.0);
 	}
 }
 
